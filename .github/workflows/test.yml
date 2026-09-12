@@ -17,6 +17,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
+          cache: false
       - run: test -s LICENSE
       - run: go test ./...
       - run: go vet ./...

@@ -178,7 +178,7 @@ func TestClientRejectsInvalidCapabilityConfiguration(t *testing.T) {
 	client, err := New(Config{
 		PlatformEndpoint: "http://localhost:80", AppID: "local-app", AppToken: "token",
 		Environment: map[string]string{
-			"METIS_S3_ENDPOINT": "http://silo.internal", "METIS_S3_ACCESS_KEY": "key",
+			"METIS_S3_ENDPOINT": "http://storage.example.invalid", "METIS_S3_ACCESS_KEY": "key",
 			"METIS_S3_SECRET_KEY": "secret", "METIS_S3_BUCKET": "bucket", "METIS_S3_SHARED_BUCKETS": "null",
 		},
 	})

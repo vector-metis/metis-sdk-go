@@ -125,6 +125,12 @@ func TestContextModelsStorageAndWebRequest(t *testing.T) {
 	if err != nil || model.Model != "example-chat" || model.Values["MAX_OUTPUT_TOKENS"] != "8192" {
 		t.Fatalf("model = %#v, err = %v", model, err)
 	}
+	for slot, want := range map[string]string{"embedding.0": "example-embedding", "rerank.0": "example-rerank"} {
+		model, slotErr := client.Model(slot)
+		if slotErr != nil || model.Model != want {
+			t.Fatalf("Model(%q) = %#v, err = %v", slot, model, slotErr)
+		}
+	}
 	storage, err := client.ObjectStorage()
 	if err != nil || storage.Bucket != "caller-a7x2m" || len(storage.SharedBuckets) != 1 {
 		t.Fatalf("storage = %#v, err = %v", storage, err)

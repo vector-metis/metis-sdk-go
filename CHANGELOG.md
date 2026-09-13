@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- 未发布的改动记录在这里。
+- 补充 `embedding.N` 和 `rerank.N` 模型 slot 的测试与使用示例。
 
 ## 0.1.0
 

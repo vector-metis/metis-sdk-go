@@ -36,8 +36,8 @@
   },
   "dependencies": {
     "dependencies": [
-      {"appId":"web-dependency-a7x2m","alias":"ui","required":true,"appType":"RUNTIME_APPLICATION_TYPE_WEB","available":true,"webBasePath":"/apps/web-dependency-a7x2m"},
-      {"appId":"service-dependency-a7x2m","alias":"data","required":true,"appType":"RUNTIME_APPLICATION_TYPE_SERVICE","available":true,"webBasePath":""}
+      {"appId":"web-dependency-a7x2m","alias":"ui","required":true,"requestedVersion":"^1.2.0","resolvedVersion":"1.4.2","packageSha256":"sha256:web","available":true,"direct":true,"resolutionError":"","appType":"RUNTIME_APPLICATION_TYPE_WEB","webBasePath":"/apps/web-dependency-a7x2m"},
+      {"appId":"service-dependency-a7x2m","alias":"data","required":true,"requestedVersion":"~2.0.0","resolvedVersion":"2.0.3","packageSha256":"sha256:data","available":true,"direct":true,"resolutionError":"","appType":"RUNTIME_APPLICATION_TYPE_SERVICE","webBasePath":""}
     ]
   },
   "endpoint": {"appId":"service-dependency-a7x2m","endpointName":"database","protocol":"RUNTIME_ENDPOINT_PROTOCOL_TCP","host":"10.0.0.10","port":31001,"available":true}

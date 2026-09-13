@@ -51,12 +51,17 @@ type cacheEntry struct {
 
 // Dependency 描述一个 manifest 直接依赖及其当前可用性。
 type Dependency struct {
-	AppID       string `json:"appId"`
-	Alias       string `json:"alias"`
-	Required    bool   `json:"required"`
-	AppType     string `json:"appType"`
-	Available   bool   `json:"available"`
-	WebBasePath string `json:"webBasePath"`
+	AppID            string `json:"appId"`
+	Alias            string `json:"alias"`
+	Required         bool   `json:"required"`
+	RequestedVersion string `json:"requestedVersion"`
+	ResolvedVersion  string `json:"resolvedVersion"`
+	PackageSHA256    string `json:"packageSha256"`
+	Available        bool   `json:"available"`
+	Direct           bool   `json:"direct"`
+	ResolutionError  string `json:"resolutionError"`
+	AppType          string `json:"appType"`
+	WebBasePath      string `json:"webBasePath"`
 }
 
 // ServiceEndpoint 是 Service 依赖经 Master 代理后的稳定地址。

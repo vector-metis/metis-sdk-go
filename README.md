@@ -44,6 +44,9 @@ func main() {
 
 运行环境必须提供 `METIS_PLATFORM_ENDPOINT`、`METIS_APP_ID` 和 `METIS_APP_TOKEN`。本地测试可以通过 `metis.Config` 显式传入替代值。应用 token 只用于当前应用声明的 Runtime API 和依赖调用，SDK 不实现业务协议客户端，也不自动重试。
 
+依赖结果包含 `RequestedVersion`、`ResolvedVersion`、`PackageSHA256`、`Direct`、`Available` 和
+`ResolutionError`，分别表示原始约束、平台锁定版本、MPK 摘要、直接/传递关系、当前可用性和诊断原因。
+
 ## 开发
 
 ```bash

@@ -85,10 +85,17 @@ type RequestContext struct {
 
 // ModelConfig 是平台为一个模型 slot 注入的稳定网关配置。
 type ModelConfig struct {
-	Endpoint string
-	Model    string
-	APIKey   string
-	Values   map[string]string
+	Endpoint         string
+	Model            string
+	APIKey           string
+	SupportsVision   bool
+	SupportsThinking bool
+	SupportsTools    bool
+	ContextWindow    int
+	MaxInputTokens   int
+	MaxOutputTokens  int
+	Dimensions       int
+	Normalized       bool
 }
 
 // ObjectStorageConfig 是平台为应用签发的 S3 兼容存储配置。
@@ -236,24 +243,79 @@ func (client *Client) ServiceEndpoint(ctx context.Context, selector, endpointNam
 	return endpoint, err
 }
 
-// Model 解析一个形如 llm.0 的模型 slot，不创建任何厂商客户端。
-func (client *Client) Model(slot string) (ModelConfig, error) {
+func (client *Client) parseModelSlot(slot string) (ModelConfig, bool, error) {
 	parts := strings.Split(slot, ".")
 	if len(parts) != 2 || (parts[0] != "llm" && parts[0] != "embedding" && parts[0] != "rerank") || !asciiDigits(parts[1]) {
-		return ModelConfig{}, fmt.Errorf("%w: invalid model slot %q", ErrInvalidConfig, slot)
+		return ModelConfig{}, false, fmt.Errorf("%w: invalid model slot %q", ErrInvalidConfig, slot)
 	}
 	prefix := "METIS_" + strings.ToUpper(parts[0]) + "_" + parts[1] + "_"
-	values := make(map[string]string)
-	for name, value := range client.environment() {
-		if strings.HasPrefix(name, prefix) {
-			values[strings.TrimPrefix(name, prefix)] = value
-		}
+	env := client.environment()
+	endpoint := env[prefix+"ENDPOINT"]
+	modelName := env[prefix+"MODEL"]
+	apiKey := env[prefix+"API_KEY"]
+	if endpoint == "" || modelName == "" || apiKey == "" {
+		return ModelConfig{}, false, nil
 	}
-	configuration := ModelConfig{Endpoint: values["ENDPOINT"], Model: values["MODEL"], APIKey: values["API_KEY"], Values: values}
-	if configuration.Endpoint == "" || configuration.Model == "" || configuration.APIKey == "" {
+	toInt := func(key string) int {
+		v, _ := strconv.Atoi(env[prefix+key])
+		return v
+	}
+	toBool := func(key string) bool {
+		return strings.EqualFold(env[prefix+key], "true")
+	}
+	config := ModelConfig{
+		Endpoint:         endpoint,
+		Model:            modelName,
+		APIKey:           apiKey,
+		SupportsVision:   toBool("SUPPORTS_VISION"),
+		SupportsThinking: toBool("SUPPORTS_THINKING"),
+		SupportsTools:    toBool("SUPPORTS_TOOLS"),
+		ContextWindow:    toInt("CONTEXT_WINDOW"),
+		MaxInputTokens:   toInt("MAX_INPUT_TOKENS"),
+		MaxOutputTokens:  toInt("MAX_OUTPUT_TOKENS"),
+		Dimensions:       toInt("DIMENSIONS"),
+		Normalized:       toBool("NORMALIZED"),
+	}
+	return config, true, nil
+}
+
+// Model 解析一个形如 llm.0 的模型 slot，不创建任何厂商客户端。未绑定或缺失配置时返回 ErrMissingConfig。
+func (client *Client) Model(slot string) (ModelConfig, error) {
+	config, bound, err := client.parseModelSlot(slot)
+	if err != nil {
+		return ModelConfig{}, err
+	}
+	if !bound {
 		return ModelConfig{}, fmt.Errorf("%w: model slot %s requires ENDPOINT, MODEL and API_KEY", ErrMissingConfig, slot)
 	}
-	return configuration, nil
+	return config, nil
+}
+
+// TryModel 尝试读取指定模型插槽配置；若插槽未绑定或插槽名称格式非法，则返回 (ModelConfig{}, false)。
+func (client *Client) TryModel(slot string) (ModelConfig, bool) {
+	config, bound, err := client.parseModelSlot(slot)
+	if err != nil || !bound {
+		return ModelConfig{}, false
+	}
+	return config, true
+}
+
+// Models 批量枚举指定模型类型（llm, embedding, rerank）当前有效绑定的所有模型配置，按插槽序号（0~9）升序排列。
+func (client *Client) Models(modelType string) ([]ModelConfig, error) {
+	if modelType != "llm" && modelType != "embedding" && modelType != "rerank" {
+		return nil, fmt.Errorf("%w: invalid model type %q", ErrInvalidConfig, modelType)
+	}
+	var configs []ModelConfig
+	for i := 0; i < 10; i++ {
+		slot := fmt.Sprintf("%s.%d", modelType, i)
+		if config, ok := client.TryModel(slot); ok {
+			configs = append(configs, config)
+		}
+	}
+	if configs == nil {
+		configs = []ModelConfig{}
+	}
+	return configs, nil
 }
 
 // ObjectStorage 解析应用 S3 配置，不连接对象存储或刷新凭据。

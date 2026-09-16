@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
-- 补充 `embedding.N` 和 `rerank.N` 模型 slot 的测试与使用示例。
+- 强类型重构 `ModelConfig`，彻底移除弱类型 `Values` 字典。
+- 增加模型特性与卡片参数属性：`SupportsVision`, `SupportsThinking`, `SupportsTools`, `ContextWindow`, `MaxInputTokens`, `MaxOutputTokens`, `Dimensions`, `Normalized`。
+- 增加批量模型枚举 `Models(modelType)` 与安全探活 `TryModel(slot)` API。
 
 ## 0.1.1
 

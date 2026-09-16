@@ -122,14 +122,33 @@ func TestContextModelsStorageAndWebRequest(t *testing.T) {
 		}
 	}
 	model, err := client.Model("llm.0")
-	if err != nil || model.Model != "example-chat" || model.Values["MAX_OUTPUT_TOKENS"] != "8192" {
+	if err != nil || model.Model != "example-chat" || model.MaxOutputTokens != 8192 ||
+		!model.SupportsVision || model.SupportsThinking || !model.SupportsTools || model.ContextWindow != 32768 {
 		t.Fatalf("model = %#v, err = %v", model, err)
 	}
-	for slot, want := range map[string]string{"embedding.0": "example-embedding", "rerank.0": "example-rerank"} {
-		model, slotErr := client.Model(slot)
-		if slotErr != nil || model.Model != want {
-			t.Fatalf("Model(%q) = %#v, err = %v", slot, model, slotErr)
-		}
+	if tryM, ok := client.TryModel("llm.0"); !ok || tryM.Model != "example-chat" {
+		t.Fatalf("TryModel(llm.0) = %#v, %v", tryM, ok)
+	}
+	if _, ok := client.TryModel("llm.1"); ok {
+		t.Fatalf("TryModel(llm.1) expected false")
+	}
+	if _, ok := client.TryModel("invalid"); ok {
+		t.Fatalf("TryModel(invalid) expected false")
+	}
+	llmList, err := client.Models("llm")
+	if err != nil || len(llmList) != 1 || llmList[0].Model != "example-chat" {
+		t.Fatalf("Models(llm) = %#v, err = %v", llmList, err)
+	}
+	if _, err := client.Models("unknown"); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("Models(unknown) err = %v, want ErrInvalidConfig", err)
+	}
+	embModel, err := client.Model("embedding.0")
+	if err != nil || embModel.Model != "example-embedding" || embModel.Dimensions != 1024 || !embModel.Normalized {
+		t.Fatalf("Model(embedding.0) = %#v, err = %v", embModel, err)
+	}
+	rerankModel, err := client.Model("rerank.0")
+	if err != nil || rerankModel.Model != "example-rerank" {
+		t.Fatalf("Model(rerank.0) = %#v, err = %v", rerankModel, err)
 	}
 	storage, err := client.ObjectStorage()
 	if err != nil || storage.Bucket != "caller-a7x2m" || len(storage.SharedBuckets) != 1 {

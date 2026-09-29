@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 var (
@@ -96,6 +97,90 @@ type ModelConfig struct {
 	MaxOutputTokens  int
 	Dimensions       int
 	Normalized       bool
+}
+
+// ModelAttribution 描述一次模型调用的最终用户归因，不参与插槽授权。
+// 使用构造函数创建该值，零值不是有效归因。
+type ModelAttribution struct {
+	kind           string
+	tenantID       int64
+	userID         int64
+	externalUserID string
+}
+
+// WithPlatformIdentity 把模型用量归属于平台租户中的平台用户。
+func WithPlatformIdentity(tenantID, userID int64) (ModelAttribution, error) {
+	if tenantID <= 0 || userID <= 0 {
+		return ModelAttribution{}, fmt.Errorf("%w: platform tenant and user ids must be positive", ErrInvalidConfig)
+	}
+	return ModelAttribution{kind: "platform", tenantID: tenantID, userID: userID}, nil
+}
+
+// PlatformIdentityFromRequest 从平台受保护入口覆盖写入的可信头构造归因。
+func PlatformIdentityFromRequest(request *http.Request) (ModelAttribution, error) {
+	if request == nil {
+		return ModelAttribution{}, fmt.Errorf("%w: platform request is required", ErrInvalidConfig)
+	}
+	context := ContextFromRequest(request)
+	tenantID, tenantErr := strconv.ParseInt(strings.TrimSpace(context.TenantID), 10, 64)
+	userID, userErr := strconv.ParseInt(strings.TrimSpace(context.UserID), 10, 64)
+	if tenantErr != nil || userErr != nil {
+		return ModelAttribution{}, fmt.Errorf("%w: request does not contain a valid platform identity", ErrInvalidConfig)
+	}
+	return WithPlatformIdentity(tenantID, userID)
+}
+
+// WithExternalUser 把用量归属于应用已认证的外部用户。
+func WithExternalUser(externalUserID string) (ModelAttribution, error) {
+	externalUserID = strings.TrimSpace(externalUserID)
+	if len(externalUserID) == 0 || len(externalUserID) > 128 || strings.IndexFunc(externalUserID, unicode.IsControl) >= 0 {
+		return ModelAttribution{}, fmt.Errorf("%w: external user id must be 1-128 bytes without control characters", ErrInvalidConfig)
+	}
+	return ModelAttribution{kind: "external", externalUserID: externalUserID}, nil
+}
+
+// WithoutUserAttribution 明确把后台任务等调用归入其它用户。
+func WithoutUserAttribution() ModelAttribution {
+	return ModelAttribution{kind: "other"}
+}
+
+// Apply 写入模型网关归因头，并先清理请求中可能存在的冲突值。
+func (attribution ModelAttribution) Apply(request *http.Request) error {
+	if request == nil {
+		return fmt.Errorf("%w: model request is required", ErrInvalidConfig)
+	}
+	request.Header.Del("X-Platform-Tenant-Id")
+	request.Header.Del("X-Platform-User-Id")
+	request.Header.Del("X-Platform-External-User-Id")
+	switch attribution.kind {
+	case "platform":
+		request.Header.Set("X-Platform-Tenant-Id", strconv.FormatInt(attribution.tenantID, 10))
+		request.Header.Set("X-Platform-User-Id", strconv.FormatInt(attribution.userID, 10))
+	case "external":
+		request.Header.Set("X-Platform-External-User-Id", attribution.externalUserID)
+	case "other":
+	default:
+		return fmt.Errorf("%w: model attribution is required", ErrInvalidConfig)
+	}
+	return nil
+}
+
+// NewRequest 创建携带 slot API Key 和显式用量归因的模型网关请求。
+func (config ModelConfig) NewRequest(ctx context.Context, method, requestPath string, body io.Reader, attribution ModelAttribution) (*http.Request, error) {
+	endpoint := strings.TrimRight(strings.TrimSpace(config.Endpoint), "/")
+	requestPath = strings.TrimSpace(requestPath)
+	if endpoint == "" || config.APIKey == "" || requestPath == "" || !strings.HasPrefix(requestPath, "/") {
+		return nil, fmt.Errorf("%w: model endpoint, API key and absolute request path are required", ErrInvalidConfig)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, endpoint+requestPath, body)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+config.APIKey)
+	if err := attribution.Apply(request); err != nil {
+		return nil, err
+	}
+	return request, nil
 }
 
 // ObjectStorageConfig 是平台为应用签发的 S3 兼容存储配置。

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- 增加平台用户、应用外部用户和其它用户三类模型用量归因构造器。
+- 增加 `ModelConfig.NewRequest`，统一携带模型插槽 API Key 和互斥归因头。
+
 ## 0.2.0
 
 - 强类型重构 `ModelConfig`，彻底移除弱类型 `Values` 字典。

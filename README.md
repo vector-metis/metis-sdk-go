@@ -42,6 +42,21 @@ func main() {
 
 `Model` 支持 `llm.N`、`embedding.N` 和 `rerank.N` 三类 slot，并返回对应的网关地址、模型别名、API key 及类型专属参数。SDK 不创建厂商客户端。
 
+模型插槽 API key 始终必填；最终用户归因与插槽授权相互独立。应用后端应按调用来源明确选择一种归因：
+
+```go
+model, _ := client.Model("llm.0")
+attribution, _ := metis.PlatformIdentityFromRequest(incomingRequest)
+request, _ := model.NewRequest(ctx, http.MethodPost, "/v1/chat/completions", body, attribution)
+
+external, _ := metis.WithExternalUser("customer-42")
+request, _ = model.NewRequest(ctx, http.MethodPost, "/v1/chat/completions", body, external)
+
+request, _ = model.NewRequest(ctx, http.MethodPost, "/v1/embeddings", body, metis.WithoutUserAttribution())
+```
+
+优先从平台保护入口的可信请求头构造平台用户归因。`WithExternalUser` 只适用于应用已经自行认证的外部用户；后台任务无法对应到个人时才使用 `WithoutUserAttribution`。浏览器端不得持有模型插槽 API key。
+
 运行环境必须提供 `METIS_PLATFORM_ENDPOINT`、`METIS_APP_ID` 和 `METIS_APP_TOKEN`。本地测试可以通过 `metis.Config` 显式传入替代值。应用 token 只用于当前应用声明的 Runtime API 和依赖调用，SDK 不实现业务协议客户端，也不自动重试。
 
 依赖结果包含 `RequestedVersion`、`ResolvedVersion`、`PackageSHA256`、`Direct`、`Available` 和

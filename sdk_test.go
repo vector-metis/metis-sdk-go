@@ -156,6 +156,67 @@ func TestContextModelsStorageAndWebRequest(t *testing.T) {
 	}
 }
 
+// TestModelRequestAttribution 验证插槽密钥始终发送，三类归因头保持互斥。
+func TestModelRequestAttribution(t *testing.T) {
+	config := ModelConfig{Endpoint: "http://metis.internal/model-gateway", APIKey: "slot-key"}
+	platform, err := WithPlatformIdentity(42, 84)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := config.NewRequest(t.Context(), http.MethodPost, "/v1/chat/completions", nil, platform)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Header.Get("Authorization") != "Bearer slot-key" ||
+		request.Header.Get("X-Platform-Tenant-Id") != "42" || request.Header.Get("X-Platform-User-Id") != "84" {
+		t.Fatalf("platform request headers = %#v", request.Header)
+	}
+
+	external, err := WithExternalUser(" customer-1 ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-Platform-Tenant-Id", "forged")
+	if err := external.Apply(request); err != nil {
+		t.Fatal(err)
+	}
+	if request.Header.Get("X-Platform-Tenant-Id") != "" || request.Header.Get("X-Platform-User-Id") != "" ||
+		request.Header.Get("X-Platform-External-User-Id") != "customer-1" {
+		t.Fatalf("external request headers = %#v", request.Header)
+	}
+
+	if err := WithoutUserAttribution().Apply(request); err != nil {
+		t.Fatal(err)
+	}
+	if request.Header.Get("X-Platform-External-User-Id") != "" {
+		t.Fatalf("other request headers = %#v", request.Header)
+	}
+}
+
+func TestModelAttributionRejectsInvalidInput(t *testing.T) {
+	if _, err := WithPlatformIdentity(0, 1); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("WithPlatformIdentity() error = %v", err)
+	}
+	for _, externalID := range []string{" ", strings.Repeat("a", 129), "bad\nvalue"} {
+		if _, err := WithExternalUser(externalID); !errors.Is(err, ErrInvalidConfig) {
+			t.Fatalf("WithExternalUser(%q) error = %v", externalID, err)
+		}
+	}
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	if _, err := PlatformIdentityFromRequest(request); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("PlatformIdentityFromRequest() error = %v", err)
+	}
+	request.Header.Set("X-Platform-Tenant-Id", "42")
+	request.Header.Set("X-Platform-User-Id", "84")
+	if attribution, err := PlatformIdentityFromRequest(request); err != nil || attribution.kind != "platform" {
+		t.Fatalf("PlatformIdentityFromRequest() = %#v, %v", attribution, err)
+	}
+	config := ModelConfig{Endpoint: "http://metis.internal/model-gateway", APIKey: "slot-key"}
+	if _, err := config.NewRequest(t.Context(), http.MethodPost, "/v1/embeddings", nil, ModelAttribution{}); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+}
+
 func TestNewRequiresIdentityUnlessExplicitlyConfigured(t *testing.T) {
 	client, err := New(Config{Environment: map[string]string{}})
 	if err == nil || client != nil {

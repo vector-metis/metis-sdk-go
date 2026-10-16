@@ -46,6 +46,8 @@ func TestClientUsesSharedContractAndSuccessCache(t *testing.T) {
 			_, _ = writer.Write(fixture.Endpoint)
 		case strings.HasSuffix(request.URL.Path, "/dependencies"):
 			_, _ = writer.Write(fixture.Dependencies)
+		case strings.HasSuffix(request.URL.Path, "/models"):
+			_, _ = writer.Write([]byte(`{"models":[{"slot":"llm.0","slotType":"llm","slotIndex":0,"interface":"openai.chat.completions","model":"qwen-plus","displayName":"通义千问 Plus","traits":["vision","tools"],"supportsVision":true,"supportsTools":true,"activity":"active","busyLevel":"unknown","updatedAt":"2026-10-17T00:00:00Z"}]}`))
 		default:
 			http.NotFound(writer, request)
 		}
@@ -70,6 +72,10 @@ func TestClientUsesSharedContractAndSuccessCache(t *testing.T) {
 	endpoint, err := client.ServiceEndpoint(context.Background(), "data", "database", false)
 	if err != nil || endpoint.Host != "10.0.0.10" || endpoint.Port != 31001 {
 		t.Fatalf("endpoint = %#v, err = %v", endpoint, err)
+	}
+	models, err := client.ListRuntimeModels(context.Background(), false)
+	if err != nil || len(models) != 1 || models[0].Slot != "llm.0" || !models[0].SupportsVision || models[0].BusyLevel != "unknown" {
+		t.Fatalf("runtime models = %#v, err = %v", models, err)
 	}
 }
 

@@ -99,6 +99,31 @@ type ModelConfig struct {
 	Normalized       bool
 }
 
+// RuntimeModel 是平台 Runtime API 返回的当前生效模型公共投影。
+// 它只包含展示与能力字段，不包含 API Key、供应商凭据或其它秘密。
+type RuntimeModel struct {
+	Slot             string   `json:"slot"`
+	SlotType         string   `json:"slotType"`
+	SlotIndex        int      `json:"slotIndex"`
+	Interface        string   `json:"interface"`
+	Endpoint         string   `json:"endpoint"`
+	Model            string   `json:"model"`
+	DisplayName      string   `json:"displayName"`
+	IconURL          string   `json:"iconUrl"`
+	Description      string   `json:"description"`
+	Traits           []string `json:"traits"`
+	SupportsVision   bool     `json:"supportsVision"`
+	SupportsThinking bool     `json:"supportsThinking"`
+	SupportsTools    bool     `json:"supportsTools"`
+	ContextWindow    int64    `json:"contextWindow"`
+	MaxInputTokens   int64    `json:"maxInputTokens"`
+	MaxOutputTokens  int64    `json:"maxOutputTokens"`
+	Dimensions       int64    `json:"dimensions"`
+	Activity         string   `json:"activity"`
+	BusyLevel        string   `json:"busyLevel"`
+	UpdatedAt        string   `json:"updatedAt"`
+}
+
 // ModelAttribution 描述一次模型调用的最终用户归因，不参与插槽授权。
 // 使用构造函数创建该值，零值不是有效归因。
 type ModelAttribution struct {
@@ -326,6 +351,21 @@ func (client *Client) ServiceEndpoint(ctx context.Context, selector, endpointNam
 	var endpoint ServiceEndpoint
 	err := client.get(ctx, client.runtimePath("dependencies", selector, "endpoints", endpointName), refresh, &endpoint)
 	return endpoint, err
+}
+
+// ListRuntimeModels 返回当前应用已经绑定的模型 slot 及非敏感能力数据。
+// refresh 为 true 时绕过成功结果缓存；平台没有可靠状态时会返回 unknown。
+func (client *Client) ListRuntimeModels(ctx context.Context, refresh bool) ([]RuntimeModel, error) {
+	var response struct {
+		Models []RuntimeModel `json:"models"`
+	}
+	if err := client.get(ctx, client.runtimePath("models"), refresh, &response); err != nil {
+		return nil, err
+	}
+	if response.Models == nil {
+		return []RuntimeModel{}, nil
+	}
+	return response.Models, nil
 }
 
 func (client *Client) parseModelSlot(slot string) (ModelConfig, bool, error) {

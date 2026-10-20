@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- 用 `RuntimeConfig` 统一读取当前 service 的 settings、models、storage、tenant、features 和 revision。
+- 删除已废弃的 `ListRuntimeModels` 及旧 Runtime Model API 路由。
+- 增加 `METIS_SERVICE_NAME` 和完整 RuntimeModel 展示、能力、状态字段。
+
 ## 0.3.2
 
 - CI 使用 Go 1.26.x 运行安全扫描，避免旧标准库公告阻塞 SDK 发布。

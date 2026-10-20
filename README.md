@@ -42,12 +42,13 @@ func main() {
 
 `Model` 支持 `llm.N`、`embedding.N` 和 `rerank.N` 三类 slot，并返回对应的网关地址、模型别名、API key 及类型专属参数。SDK 不创建厂商客户端。
 
-使用 `ListRuntimeModels` 可读取当前应用已绑定 slot 的展示名称、图标、能力、上下文限制和繁忙度；响应不包含 API key 或供应商凭据：
+使用 `RuntimeConfig` 可读取当前 service 的模型展示名称、图标、能力、上下文限制、状态和 revision；响应不包含 API key 或供应商凭据：
 
 ```go
-models, _ := client.ListRuntimeModels(ctx, false)
-for _, model := range models {
-	log.Printf("%s: %s (%s)", model.Slot, model.DisplayName, model.BusyLevel)
+config, err := client.RuntimeConfig(ctx, false)
+if err != nil { log.Fatal(err) }
+for slot, model := range config.Config.Models {
+	log.Printf("%s: %s (%s)", slot, model.DisplayName, model.BusyLevel)
 }
 ```
 

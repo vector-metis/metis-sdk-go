@@ -104,6 +104,9 @@ type ModelConfig struct {
 // RuntimeModel 是平台 Runtime API 返回的当前生效模型公共投影。
 // 它只包含展示与能力字段，不包含 API Key、供应商凭据或其它秘密。
 type RuntimeModel struct {
+	Declared           bool     `json:"declared"`
+	Bound              bool     `json:"bound"`
+	Status             string   `json:"status"`
 	Slot               string   `json:"slot"`
 	SlotType           string   `json:"slotType"`
 	SlotIndex          int      `json:"slotIndex"`
@@ -117,31 +120,30 @@ type RuntimeModel struct {
 	SupportsVision     bool     `json:"supportsVision"`
 	SupportsThinking   bool     `json:"supportsThinking"`
 	SupportsTools      bool     `json:"supportsTools"`
-	ContextWindow      int64    `json:"contextWindow"`
-	MaxInputTokens     int64    `json:"maxInputTokens"`
-	MaxOutputTokens    int64    `json:"maxOutputTokens"`
-	Dimensions         int64    `json:"dimensions"`
+	ContextWindow      int64    `json:"contextWindow,string"`
+	MaxInputTokens     int64    `json:"maxInputTokens,string"`
+	MaxOutputTokens    int64    `json:"maxOutputTokens,string"`
+	Dimensions         int64    `json:"dimensions,string"`
 	Activity           string   `json:"activity"`
 	BusyLevel          string   `json:"busyLevel"`
 	UpdatedAt          string   `json:"updatedAt"`
-	Declared           bool     `json:"declared"`
-	Bound              bool     `json:"bound"`
-	Status             string   `json:"status"`
-	IconFileID         int64    `json:"iconFileId"`
+	IconFileID         int64    `json:"iconFileId,string"`
 	SupportsAudio      bool     `json:"supportsAudio"`
 	SupportsImageInput bool     `json:"supportsImageInput"`
 	SupportsMultimodal bool     `json:"supportsMultimodal"`
 }
 
+// RuntimeSetting 是统一运行配置中的 service 级设置投影。
 type RuntimeSetting struct {
 	Type     string `json:"type"`
 	Required bool   `json:"required"`
 	Value    string `json:"value"`
 }
 
+// RuntimeConfigSnapshot 是一个 revision 一致的 service 运行配置快照。
 type RuntimeConfigSnapshot struct {
 	SchemaVersion int64  `json:"schemaVersion"`
-	Revision      int64  `json:"revision"`
+	Revision      int64  `json:"revision,string"`
 	UpdatedAt     string `json:"updatedAt"`
 	Application   struct {
 		AppID          string `json:"appId"`
@@ -388,13 +390,14 @@ func (client *Client) ServiceEndpoint(ctx context.Context, selector, endpointNam
 	return endpoint, err
 }
 
-// RuntimeConfig 读取当前 service 的统一运行配置快照。
+// RuntimeConfig 读取当前 service 的统一运行配置；配置服务身份缺失时明确失败。
 func (client *Client) RuntimeConfig(ctx context.Context, refresh bool) (RuntimeConfigSnapshot, error) {
-	if strings.TrimSpace(client.service) == "" {
+	if client.service == "" {
 		return RuntimeConfigSnapshot{}, fmt.Errorf("%w: METIS_SERVICE_NAME is required", ErrMissingConfig)
 	}
 	var response RuntimeConfigSnapshot
-	if err := client.getWithHeaders(ctx, "/api/runtime/v1/config", refresh, &response, map[string]string{"X-Metis-Service": client.service}); err != nil {
+	requestPath := "/api/runtime/v1/config"
+	if err := client.getWithHeaders(ctx, requestPath, refresh, &response, map[string]string{"X-Metis-Service": client.service}); err != nil {
 		return RuntimeConfigSnapshot{}, err
 	}
 	return response, nil

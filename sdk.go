@@ -31,6 +31,7 @@ type Config struct {
 	HTTPClient       *http.Client
 	CacheTTL         time.Duration
 	Environment      map[string]string
+	ServiceName      string
 }
 
 // Client 调用平台 Runtime API，并只缓存成功的发现结果。
@@ -41,6 +42,7 @@ type Client struct {
 	http     *http.Client
 	ttl      time.Duration
 	env      map[string]string
+	service  string
 	mu       sync.Mutex
 	cache    map[string]cacheEntry
 }
@@ -97,6 +99,65 @@ type ModelConfig struct {
 	MaxOutputTokens  int
 	Dimensions       int
 	Normalized       bool
+}
+
+// RuntimeModel 是平台 Runtime API 返回的当前生效模型公共投影。
+// 它只包含展示与能力字段，不包含 API Key、供应商凭据或其它秘密。
+type RuntimeModel struct {
+	Declared           bool     `json:"declared"`
+	Bound              bool     `json:"bound"`
+	Status             string   `json:"status"`
+	Slot               string   `json:"slot"`
+	SlotType           string   `json:"slotType"`
+	SlotIndex          int      `json:"slotIndex"`
+	Interface          string   `json:"interface"`
+	Endpoint           string   `json:"endpoint"`
+	Model              string   `json:"model"`
+	DisplayName        string   `json:"displayName"`
+	IconURL            string   `json:"iconUrl"`
+	Description        string   `json:"description"`
+	Traits             []string `json:"traits"`
+	SupportsVision     bool     `json:"supportsVision"`
+	SupportsThinking   bool     `json:"supportsThinking"`
+	SupportsTools      bool     `json:"supportsTools"`
+	ContextWindow      int64    `json:"contextWindow,string"`
+	MaxInputTokens     int64    `json:"maxInputTokens,string"`
+	MaxOutputTokens    int64    `json:"maxOutputTokens,string"`
+	Dimensions         int64    `json:"dimensions,string"`
+	Activity           string   `json:"activity"`
+	BusyLevel          string   `json:"busyLevel"`
+	UpdatedAt          string   `json:"updatedAt"`
+	IconFileID         int64    `json:"iconFileId,string"`
+	SupportsAudio      bool     `json:"supportsAudio"`
+	SupportsImageInput bool     `json:"supportsImageInput"`
+	SupportsMultimodal bool     `json:"supportsMultimodal"`
+}
+
+// RuntimeSetting 是统一运行配置中的 service 级设置投影。
+type RuntimeSetting struct {
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+	Value    string `json:"value"`
+}
+
+// RuntimeConfigSnapshot 是一个 revision 一致的 service 运行配置快照。
+type RuntimeConfigSnapshot struct {
+	SchemaVersion int64  `json:"schemaVersion"`
+	Revision      int64  `json:"revision,string"`
+	UpdatedAt     string `json:"updatedAt"`
+	Application   struct {
+		AppID          string `json:"appId"`
+		InstallationID string `json:"installationId"`
+		Service        string `json:"service"`
+		Version        string `json:"version"`
+	} `json:"application"`
+	Config struct {
+		Settings map[string]RuntimeSetting `json:"settings"`
+		Models   map[string]RuntimeModel   `json:"models"`
+		Storage  map[string]any            `json:"storage"`
+		Tenant   map[string]any            `json:"tenant"`
+		Features map[string]any            `json:"features"`
+	} `json:"config"`
 }
 
 // ModelAttribution 描述一次模型调用的最终用户归因，不参与插槽授权。
@@ -235,6 +296,7 @@ func New(configuration Config) (*Client, error) {
 		return strings.TrimSpace(environment[name])
 	}
 	endpointText, appID, token := get("METIS_PLATFORM_ENDPOINT", configuration.PlatformEndpoint), get("METIS_APP_ID", configuration.AppID), get("METIS_APP_TOKEN", configuration.AppToken)
+	serviceName := get("METIS_SERVICE_NAME", configuration.ServiceName)
 	if endpointText == "" || appID == "" || token == "" {
 		return nil, fmt.Errorf("%w: METIS_PLATFORM_ENDPOINT, METIS_APP_ID and METIS_APP_TOKEN are required", ErrMissingConfig)
 	}
@@ -258,7 +320,7 @@ func New(configuration Config) (*Client, error) {
 	for name, value := range environment {
 		copiedEnvironment[name] = value
 	}
-	return &Client{endpoint: endpoint, appID: appID, token: token, http: httpClient, ttl: ttl, env: copiedEnvironment, cache: make(map[string]cacheEntry)}, nil
+	return &Client{endpoint: endpoint, appID: appID, token: token, http: httpClient, ttl: ttl, env: copiedEnvironment, service: serviceName, cache: make(map[string]cacheEntry)}, nil
 }
 
 // ContextFromRequest 只读取平台可信头，不读取 Cookie、query 或请求体。
@@ -326,6 +388,19 @@ func (client *Client) ServiceEndpoint(ctx context.Context, selector, endpointNam
 	var endpoint ServiceEndpoint
 	err := client.get(ctx, client.runtimePath("dependencies", selector, "endpoints", endpointName), refresh, &endpoint)
 	return endpoint, err
+}
+
+// RuntimeConfig 读取当前 service 的统一运行配置；配置服务身份缺失时明确失败。
+func (client *Client) RuntimeConfig(ctx context.Context, refresh bool) (RuntimeConfigSnapshot, error) {
+	if client.service == "" {
+		return RuntimeConfigSnapshot{}, fmt.Errorf("%w: METIS_SERVICE_NAME is required", ErrMissingConfig)
+	}
+	var response RuntimeConfigSnapshot
+	requestPath := "/api/runtime/v1/config"
+	if err := client.getWithHeaders(ctx, requestPath, refresh, &response, map[string]string{"X-Metis-Service": client.service}); err != nil {
+		return RuntimeConfigSnapshot{}, err
+	}
+	return response, nil
 }
 
 func (client *Client) parseModelSlot(slot string) (ModelConfig, bool, error) {
@@ -512,6 +587,10 @@ func (client *Client) absolutePath(basePath, requestPath string) (string, error)
 }
 
 func (client *Client) get(ctx context.Context, path string, refresh bool, target any) error {
+	return client.getWithHeaders(ctx, path, refresh, target, nil)
+}
+
+func (client *Client) getWithHeaders(ctx context.Context, path string, refresh bool, target any, headers map[string]string) error {
 	if !refresh && client.ttl > 0 {
 		client.mu.Lock()
 		entry, found := client.cache[path]
@@ -527,6 +606,9 @@ func (client *Client) get(ctx context.Context, path string, refresh bool, target
 		return err
 	}
 	request.Header.Set("Authorization", "Bearer "+client.token)
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
 	response, err := client.http.Do(request)
 	if err != nil {
 		return err

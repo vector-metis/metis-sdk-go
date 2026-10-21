@@ -46,12 +46,17 @@ func TestClientUsesSharedContractAndSuccessCache(t *testing.T) {
 			_, _ = writer.Write(fixture.Endpoint)
 		case strings.HasSuffix(request.URL.Path, "/dependencies"):
 			_, _ = writer.Write(fixture.Dependencies)
+		case request.URL.Path == "/api/runtime/v1/config":
+			if request.Header.Get("X-Metis-Service") != "web" {
+				t.Fatalf("service header = %q", request.Header.Get("X-Metis-Service"))
+			}
+			_, _ = writer.Write([]byte(`{"schemaVersion":1,"revision":"2","config":{"settings":{"site-name":{"type":"string","required":false,"value":"demo"}},"models":{"llm.0":{"slot":"llm.0","slotIndex":0,"declared":true,"bound":true,"status":"available","interface":"openai.chat.completions","model":"qwen-plus","displayName":"通义千问 Plus","traits":["vision","tools"],"supportsVision":true,"supportsTools":true,"contextWindow":"131072","iconFileId":"42","activity":"active","busyLevel":"unknown"}},"storage":{},"tenant":{},"features":{}}}`))
 		default:
 			http.NotFound(writer, request)
 		}
 	}))
 	defer server.Close()
-	client, err := New(Config{PlatformEndpoint: server.URL, AppID: "caller-a7x2m", AppToken: "app-token", Environment: fixture.Environment, CacheTTL: time.Minute})
+	client, err := New(Config{PlatformEndpoint: server.URL, AppID: "caller-a7x2m", AppToken: "app-token", ServiceName: "web", Environment: fixture.Environment, CacheTTL: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +75,10 @@ func TestClientUsesSharedContractAndSuccessCache(t *testing.T) {
 	endpoint, err := client.ServiceEndpoint(context.Background(), "data", "database", false)
 	if err != nil || endpoint.Host != "10.0.0.10" || endpoint.Port != 31001 {
 		t.Fatalf("endpoint = %#v, err = %v", endpoint, err)
+	}
+	config, err := client.RuntimeConfig(context.Background(), false)
+	if err != nil || config.Revision != 2 || !config.Config.Models["llm.0"].SupportsVision {
+		t.Fatalf("runtime config = %#v, err = %v", config, err)
 	}
 }
 

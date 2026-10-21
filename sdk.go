@@ -1,6 +1,7 @@
 package metis
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -120,17 +121,38 @@ type RuntimeModel struct {
 	SupportsVision     bool     `json:"supportsVision"`
 	SupportsThinking   bool     `json:"supportsThinking"`
 	SupportsTools      bool     `json:"supportsTools"`
-	ContextWindow      int64    `json:"contextWindow,string"`
-	MaxInputTokens     int64    `json:"maxInputTokens,string"`
-	MaxOutputTokens    int64    `json:"maxOutputTokens,string"`
-	Dimensions         int64    `json:"dimensions,string"`
+	ContextWindow      int64    `json:"contextWindow"`
+	MaxInputTokens     int64    `json:"maxInputTokens"`
+	MaxOutputTokens    int64    `json:"maxOutputTokens"`
+	Dimensions         int64    `json:"dimensions"`
 	Activity           string   `json:"activity"`
 	BusyLevel          string   `json:"busyLevel"`
 	UpdatedAt          string   `json:"updatedAt"`
-	IconFileID         int64    `json:"iconFileId,string"`
+	IconFileID         int64    `json:"iconFileId"`
 	SupportsAudio      bool     `json:"supportsAudio"`
 	SupportsImageInput bool     `json:"supportsImageInput"`
 	SupportsMultimodal bool     `json:"supportsMultimodal"`
+}
+
+func (model *RuntimeModel) UnmarshalJSON(data []byte) error {
+	type plain RuntimeModel
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	normalizeRuntimeNumbers(value)
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var decoded plain
+	if err := json.Unmarshal(normalized, &decoded); err != nil {
+		return err
+	}
+	*model = RuntimeModel(decoded)
+	return nil
 }
 
 // RuntimeSetting 是统一运行配置中的 service 级设置投影。
@@ -143,7 +165,7 @@ type RuntimeSetting struct {
 // RuntimeConfigSnapshot 是一个 revision 一致的 service 运行配置快照。
 type RuntimeConfigSnapshot struct {
 	SchemaVersion int64  `json:"schemaVersion"`
-	Revision      int64  `json:"revision,string"`
+	Revision      int64  `json:"revision"`
 	UpdatedAt     string `json:"updatedAt"`
 	Application   struct {
 		AppID          string `json:"appId"`
@@ -158,6 +180,46 @@ type RuntimeConfigSnapshot struct {
 		Tenant   map[string]any            `json:"tenant"`
 		Features map[string]any            `json:"features"`
 	} `json:"config"`
+}
+
+func (snapshot *RuntimeConfigSnapshot) UnmarshalJSON(data []byte) error {
+	type plain RuntimeConfigSnapshot
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	normalizeRuntimeNumbers(value)
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var decoded plain
+	if err := json.Unmarshal(normalized, &decoded); err != nil {
+		return err
+	}
+	*snapshot = RuntimeConfigSnapshot(decoded)
+	return nil
+}
+
+func normalizeRuntimeNumbers(value any) {
+	switch item := value.(type) {
+	case map[string]any:
+		for key, child := range item {
+			if text, ok := child.(string); ok {
+				if _, err := strconv.ParseInt(text, 10, 64); err == nil {
+					item[key] = json.Number(text)
+					continue
+				}
+			}
+			normalizeRuntimeNumbers(child)
+		}
+	case []any:
+		for _, child := range item {
+			normalizeRuntimeNumbers(child)
+		}
+	}
 }
 
 // ModelAttribution 描述一次模型调用的最终用户归因，不参与插槽授权。

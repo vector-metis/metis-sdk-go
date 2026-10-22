@@ -1,7 +1,6 @@
 package metis
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -105,54 +104,38 @@ type ModelConfig struct {
 // RuntimeModel 是平台 Runtime API 返回的当前生效模型公共投影。
 // 它只包含展示与能力字段，不包含 API Key、供应商凭据或其它秘密。
 type RuntimeModel struct {
-	Declared           bool     `json:"declared"`
-	Bound              bool     `json:"bound"`
-	Status             string   `json:"status"`
-	Slot               string   `json:"slot"`
-	SlotType           string   `json:"slotType"`
-	SlotIndex          int      `json:"slotIndex"`
-	Interface          string   `json:"interface"`
-	Endpoint           string   `json:"endpoint"`
-	Model              string   `json:"model"`
-	DisplayName        string   `json:"displayName"`
-	IconURL            string   `json:"iconUrl"`
-	Description        string   `json:"description"`
-	Traits             []string `json:"traits"`
-	SupportsVision     bool     `json:"supportsVision"`
-	SupportsThinking   bool     `json:"supportsThinking"`
-	SupportsTools      bool     `json:"supportsTools"`
-	ContextWindow      int64    `json:"contextWindow"`
-	MaxInputTokens     int64    `json:"maxInputTokens"`
-	MaxOutputTokens    int64    `json:"maxOutputTokens"`
-	Dimensions         int64    `json:"dimensions"`
-	Activity           string   `json:"activity"`
-	BusyLevel          string   `json:"busyLevel"`
-	UpdatedAt          string   `json:"updatedAt"`
-	IconFileID         int64    `json:"iconFileId"`
-	SupportsAudio      bool     `json:"supportsAudio"`
-	SupportsImageInput bool     `json:"supportsImageInput"`
-	SupportsMultimodal bool     `json:"supportsMultimodal"`
-}
-
-func (model *RuntimeModel) UnmarshalJSON(data []byte) error {
-	type plain RuntimeModel
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	normalizeRuntimeNumbers(value)
-	normalized, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	var decoded plain
-	if err := json.Unmarshal(normalized, &decoded); err != nil {
-		return err
-	}
-	*model = RuntimeModel(decoded)
-	return nil
+	Declared         bool     `json:"declared"`
+	Bound            bool     `json:"bound"`
+	Status           string   `json:"status"`
+	Slot             string   `json:"slot"`
+	SlotType         string   `json:"slotType"`
+	SlotIndex        int      `json:"slotIndex"`
+	Interface        string   `json:"interface"`
+	Endpoint         string   `json:"endpoint"`
+	Model            string   `json:"model"`
+	DisplayName      string   `json:"displayName"`
+	IconURL          string   `json:"iconUrl"`
+	Description      string   `json:"description"`
+	Traits           []string `json:"traits"`
+	SupportsVision   bool     `json:"supportsVision"`
+	SupportsThinking bool     `json:"supportsThinking"`
+	SupportsTools    bool     `json:"supportsTools"`
+	// ContextWindow 原始 protobuf 类型为 int64；protojson 和 SDK 均保持十进制字符串。
+	ContextWindow string `json:"contextWindow"`
+	// MaxInputTokens 原始 protobuf 类型为 int64；SDK 不隐式转换为数字。
+	MaxInputTokens string `json:"maxInputTokens"`
+	// MaxOutputTokens 原始 protobuf 类型为 int64；SDK 不隐式转换为数字。
+	MaxOutputTokens string `json:"maxOutputTokens"`
+	// Dimensions 原始 protobuf 类型为 int64；SDK 不隐式转换为数字。
+	Dimensions string `json:"dimensions"`
+	Activity   string `json:"activity"`
+	BusyLevel  string `json:"busyLevel"`
+	UpdatedAt  string `json:"updatedAt"`
+	// IconFileID 原始 protobuf 类型为 int64；ID 在所有语言 SDK 中统一为字符串。
+	IconFileID         string `json:"iconFileId"`
+	SupportsAudio      bool   `json:"supportsAudio"`
+	SupportsImageInput bool   `json:"supportsImageInput"`
+	SupportsMultimodal bool   `json:"supportsMultimodal"`
 }
 
 // RuntimeSetting 是统一运行配置中的 service 级设置投影。
@@ -164,10 +147,11 @@ type RuntimeSetting struct {
 
 // RuntimeConfigSnapshot 是一个 revision 一致的 service 运行配置快照。
 type RuntimeConfigSnapshot struct {
-	SchemaVersion int64  `json:"schemaVersion"`
-	Revision      int64  `json:"revision"`
-	UpdatedAt     string `json:"updatedAt"`
-	Application   struct {
+	SchemaVersion int `json:"schemaVersion"`
+	// Revision 原始 protobuf 类型为 int64；protojson 使用字符串，SDK 原样保留。
+	Revision    string `json:"revision"`
+	UpdatedAt   string `json:"updatedAt"`
+	Application struct {
 		AppID          string `json:"appId"`
 		InstallationID string `json:"installationId"`
 		Service        string `json:"service"`
@@ -180,56 +164,6 @@ type RuntimeConfigSnapshot struct {
 		Tenant   map[string]any            `json:"tenant"`
 		Features map[string]any            `json:"features"`
 	} `json:"config"`
-}
-
-func (snapshot *RuntimeConfigSnapshot) UnmarshalJSON(data []byte) error {
-	type plain RuntimeConfigSnapshot
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	normalizeRuntimeNumbers(value)
-	normalized, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	var decoded plain
-	if err := json.Unmarshal(normalized, &decoded); err != nil {
-		return err
-	}
-	*snapshot = RuntimeConfigSnapshot(decoded)
-	return nil
-}
-
-func normalizeRuntimeNumbers(value any) {
-	switch item := value.(type) {
-	case map[string]any:
-		for key, child := range item {
-			if key == "installationId" {
-				switch number := child.(type) {
-				case json.Number:
-					item[key] = number.String()
-					continue
-				case float64:
-					item[key] = strconv.FormatInt(int64(number), 10)
-					continue
-				}
-			}
-			if text, ok := child.(string); ok {
-				if _, err := strconv.ParseInt(text, 10, 64); err == nil {
-					item[key] = json.Number(text)
-					continue
-				}
-			}
-			normalizeRuntimeNumbers(child)
-		}
-	case []any:
-		for _, child := range item {
-			normalizeRuntimeNumbers(child)
-		}
-	}
 }
 
 // ModelAttribution 描述一次模型调用的最终用户归因，不参与插槽授权。

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.5
+
+- 将 Runtime Config 原始 protobuf `int64/uint64` 字段统一按字符串处理。
+- 删除全局数字字符串猜测转换，补充大整数回归测试和协议注释。
+
 ## 0.4.0
 
 - 用 `RuntimeConfig` 统一读取当前 service 的 settings、models、storage、tenant、features 和 revision。

@@ -52,6 +52,8 @@ for slot, model := range config.Config.Models {
 }
 ```
 
+Runtime Config 中原始 protobuf 类型为 `int64` 或 `uint64` 的字段（如 `revision`、`installationId`、`contextWindow` 和 `iconFileId`）在 protojson 中按十进制字符串传输，SDK 公共类型也保持为 `string`。这是跨语言协议规则，不只是浏览器兼容处理；Node.js 后端同样不能用 `number` 安全表示全部 64 位整数。SDK 不做递归数字猜测或隐式转换，需要计算时请由应用显式使用 `strconv` 转换。`int32/uint32` 和有限浮点字段仍按数字处理。
+
 模型插槽 API key 始终必填；最终用户归因与插槽授权相互独立。应用后端应按调用来源明确选择一种归因：
 
 ```go

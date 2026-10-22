@@ -77,8 +77,25 @@ func TestClientUsesSharedContractAndSuccessCache(t *testing.T) {
 		t.Fatalf("endpoint = %#v, err = %v", endpoint, err)
 	}
 	config, err := client.RuntimeConfig(context.Background(), false)
-	if err != nil || config.Revision != 2 || !config.Config.Models["llm.0"].SupportsVision {
+	if err != nil || config.Revision != "2" || !config.Config.Models["llm.0"].SupportsVision || config.Config.Models["llm.0"].ContextWindow != "131072" || config.Config.Models["llm.0"].IconFileID != "42" {
 		t.Fatalf("runtime config = %#v, err = %v", config, err)
+	}
+}
+
+func TestRuntimeConfigKeepsProto64BitFieldsAsStrings(t *testing.T) {
+	var model RuntimeModel
+	if err := json.Unmarshal([]byte(`{"contextWindow":"9007199254740993","iconFileId":"640409671307362374"}`), &model); err != nil {
+		t.Fatal(err)
+	}
+	if model.ContextWindow != "9007199254740993" || model.IconFileID != "640409671307362374" {
+		t.Fatalf("model = %#v", model)
+	}
+	encoded, err := json.Marshal(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"contextWindow":"9007199254740993"`) || !strings.Contains(string(encoded), `"iconFileId":"640409671307362374"`) {
+		t.Fatalf("encoded = %s", encoded)
 	}
 }
 

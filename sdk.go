@@ -207,6 +207,16 @@ func normalizeRuntimeNumbers(value any) {
 	switch item := value.(type) {
 	case map[string]any:
 		for key, child := range item {
+			if key == "installationId" {
+				switch number := child.(type) {
+				case json.Number:
+					item[key] = number.String()
+					continue
+				case float64:
+					item[key] = strconv.FormatInt(int64(number), 10)
+					continue
+				}
+			}
 			if text, ok := child.(string); ok {
 				if _, err := strconv.ParseInt(text, 10, 64); err == nil {
 					item[key] = json.Number(text)
